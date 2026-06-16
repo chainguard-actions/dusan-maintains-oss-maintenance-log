@@ -1,0 +1,110 @@
+name: Test custom config file and evidence directory
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            apt-get update -qq
+            apt-get install -y wget apt-transport-https software-properties-common
+            wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+            dpkg -i packages-microsoft-prod.deb
+            apt-get update -qq
+            apt-get install -y powershell
+          fi
+          pwsh --version
+
+      - name: Create minimal custom config file
+        run: |
+          mkdir -p custom-config
+          cat > custom-config/tracked-repositories.json << 'EOF'
+          {
+            "version": 1,
+            "contributor": "test-user",
+            "default_sla_hours": 24,
+            "repositories": [
+              {
+                "owner": "actions",
+                "repo": "checkout",
+                "package": null,
+                "status_label": "Active",
+                "maintainer_needed_signal": "Test repo",
+                "tracked_pr_numbers": [],
+                "review_sla_base_name": "review-sla-checkout"
+              }
+            ]
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: custom-config/tracked-repositories.json
+          evidence-dir: custom-evidence-output
+        continue-on-error: true
+
+      - name: Assert manifest-json output points to custom evidence dir
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "manifest-json: $MANIFEST_JSON"
+          if [ -z "$MANIFEST_JSON" ]; then
+            echo "FAIL: manifest-json output is empty"
+            exit 1
+          fi
+          if [[ "$MANIFEST_JSON" != *"custom-evidence-output"* ]]; then
+            echo "FAIL: manifest-json path does not reference custom evidence dir: $MANIFEST_JSON"
+            exit 1
+          fi
+          echo "PASS: manifest-json=$MANIFEST_JSON"
+
+      - name: Assert manifest.json file exists in custom evidence dir
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "Checking for manifest file at: $MANIFEST_JSON"
+          if [ ! -f "$MANIFEST_JSON" ]; then
+            echo "FAIL: manifest.json not found at $MANIFEST_JSON"
+            exit 1
+          fi
+          echo "PASS: manifest.json exists at $MANIFEST_JSON"
+
+      - name: Assert manifest.json contains expected schema_version
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          schema_version=$(python3 -c "import json, os; d=json.load(open(os.environ['MANIFEST_JSON'])); print(d.get('schema_version',''))")
+          echo "schema_version: $schema_version"
+          if [ "$schema_version" != "1" ]; then
+            echo "FAIL: expected schema_version=1, got '$schema_version'"
+            exit 1
+          fi
+          echo "PASS: schema_version=1"
+
+      - name: Assert critical-count output is set
+        env:
+          CRITICAL_COUNT: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "critical-count: $CRITICAL_COUNT"
+          if [ -z "$CRITICAL_COUNT" ]; then
+            echo "FAIL: critical-count output is empty"
+            exit 1
+          fi
+          echo "PASS: critical-count=$CRITICAL_COUNT"
+
+      - name: Assert avg-health output is set
+        env:
+          AVG_HEALTH: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "avg-health: $AVG_HEALTH"
+          if [ -z "$AVG_HEALTH" ]; then
+            echo "FAIL: avg-health output is empty"
+            exit 1
+          fi
+          echo "PASS: avg-health=$AVG_HEALTH"

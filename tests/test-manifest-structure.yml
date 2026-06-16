@@ -1,0 +1,135 @@
+name: Test manifest.json structure and outputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            apt-get update -qq
+            apt-get install -y wget apt-transport-https software-properties-common
+            wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+            dpkg -i packages-microsoft-prod.deb
+            apt-get update -qq
+            apt-get install -y powershell
+          fi
+          pwsh --version
+
+      - name: Create minimal config for structure test
+        run: |
+          mkdir -p test-config
+          cat > test-config/tracked-repositories.json << 'EOF'
+          {
+            "version": 1,
+            "contributor": "test-contributor",
+            "default_sla_hours": 48,
+            "repositories": [
+              {
+                "owner": "actions",
+                "repo": "checkout",
+                "package": null,
+                "status_label": "Active",
+                "maintainer_needed_signal": "Well-maintained",
+                "tracked_pr_numbers": [],
+                "review_sla_base_name": "review-sla-checkout"
+              }
+            ]
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: test-config/tracked-repositories.json
+          evidence-dir: test-evidence-structure
+          compute-health-scores: "true"
+        continue-on-error: true
+
+      - name: Assert manifest.json has required top-level fields
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "Checking manifest structure at: $MANIFEST_JSON"
+          if [ ! -f "$MANIFEST_JSON" ]; then
+            echo "FAIL: manifest.json not found"
+            exit 1
+          fi
+          python3 << 'PYEOF'
+          import json, sys, os
+          path = os.environ['MANIFEST_JSON']
+          with open(path) as f:
+              data = json.load(f)
+          required_fields = ['schema_version', 'run_started_at_utc', 'run_completed_at_utc', 'run_status', 'summary', 'repositories']
+          missing = [field for field in required_fields if field not in data]
+          if missing:
+              print('FAIL: missing fields: ' + str(missing))
+              sys.exit(1)
+          print('PASS: all required fields present: ' + str(list(data.keys())))
+          PYEOF
+
+      - name: Assert manifest summary has expected fields
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          python3 << 'PYEOF'
+          import json, sys, os
+          path = os.environ['MANIFEST_JSON']
+          with open(path) as f:
+              data = json.load(f)
+          summary = data.get('summary', {})
+          required_summary_fields = ['total_steps', 'successful_steps', 'failed_steps', 'tracked_repositories']
+          missing = [field for field in required_summary_fields if field not in summary]
+          if missing:
+              print('FAIL: summary missing fields: ' + str(missing))
+              sys.exit(1)
+          print('PASS: summary fields present, tracked_repositories=' + str(summary['tracked_repositories']))
+          PYEOF
+
+      - name: Assert manifest tracked_repositories count matches config
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          python3 << 'PYEOF'
+          import json, sys, os
+          path = os.environ['MANIFEST_JSON']
+          with open(path) as f:
+              data = json.load(f)
+          tracked = data['summary']['tracked_repositories']
+          if tracked != 1:
+              print('FAIL: expected tracked_repositories=1, got ' + str(tracked))
+              sys.exit(1)
+          print('PASS: tracked_repositories=' + str(tracked))
+          PYEOF
+
+      - name: Assert run_status is a known value
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          python3 << 'PYEOF'
+          import json, sys, os
+          path = os.environ['MANIFEST_JSON']
+          with open(path) as f:
+              data = json.load(f)
+          status = data.get('run_status', '')
+          valid_statuses = ['success', 'partial_success', 'failed']
+          if status not in valid_statuses:
+              print('FAIL: run_status "' + status + '" not in ' + str(valid_statuses))
+              sys.exit(1)
+          print('PASS: run_status=' + status)
+          PYEOF
+
+      - name: Assert health-json output path is set
+        env:
+          HEALTH_JSON: ${{ steps.action.outputs.health-json }}
+        run: |
+          echo "health-json: $HEALTH_JSON"
+          if [ -z "$HEALTH_JSON" ]; then
+            echo "FAIL: health-json output is empty"
+            exit 1
+          fi
+          echo "PASS: health-json=$HEALTH_JSON"

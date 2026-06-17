@@ -1,0 +1,92 @@
+name: Test custom evidence directory
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            echo "Installing PowerShell..."
+            apt-get update -qq
+            apt-get install -y wget apt-transport-https software-properties-common
+            wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+            dpkg -i packages-microsoft-prod.deb
+            apt-get update -qq
+            apt-get install -y powershell
+          else
+            echo "pwsh already available: $(pwsh --version)"
+          fi
+
+      - name: Create minimal config
+        run: |
+          mkdir -p config
+          cat > config/tracked-repositories.json << 'EOF'
+          {
+            "version": 1,
+            "contributor": "test-user",
+            "default_sla_hours": 24,
+            "repositories": [
+              {
+                "owner": "actions",
+                "repo": "checkout",
+                "package": null,
+                "status_label": "Active",
+                "maintainer_needed_signal": "Well maintained",
+                "tracked_pr_numbers": [],
+                "review_sla_base_name": "review-sla-checkout"
+              }
+            ]
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: config/tracked-repositories.json
+          evidence-dir: my-custom-evidence
+        continue-on-error: true
+
+      - name: Assert manifest-json output references custom directory
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "manifest-json: $MANIFEST_JSON"
+          if [ -z "$MANIFEST_JSON" ]; then
+            echo "FAIL: manifest-json output is empty"
+            exit 1
+          fi
+          if ! echo "$MANIFEST_JSON" | grep -q "my-custom-evidence"; then
+            echo "FAIL: manifest-json path does not reference custom evidence dir 'my-custom-evidence': $MANIFEST_JSON"
+            exit 1
+          fi
+          echo "PASS: manifest-json references custom directory"
+
+      - name: Assert health-json output references custom directory
+        env:
+          HEALTH_JSON: ${{ steps.action.outputs.health-json }}
+        run: |
+          echo "health-json: $HEALTH_JSON"
+          if [ -z "$HEALTH_JSON" ]; then
+            echo "FAIL: health-json output is empty"
+            exit 1
+          fi
+          if ! echo "$HEALTH_JSON" | grep -q "my-custom-evidence"; then
+            echo "FAIL: health-json path does not reference custom evidence dir 'my-custom-evidence': $HEALTH_JSON"
+            exit 1
+          fi
+          echo "PASS: health-json references custom directory"
+
+      - name: Assert manifest.json file exists in custom directory
+        run: |
+          echo "Checking for manifest.json in my-custom-evidence/"
+          if [ ! -f "my-custom-evidence/manifest.json" ]; then
+            echo "FAIL: manifest.json not found in my-custom-evidence/"
+            ls -la my-custom-evidence/ 2>/dev/null || echo "(directory does not exist)"
+            exit 1
+          fi
+          echo "PASS: manifest.json found in custom evidence directory"

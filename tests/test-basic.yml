@@ -1,0 +1,108 @@
+name: Test basic usage
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            echo "Installing PowerShell..."
+            apt-get update -qq
+            apt-get install -y wget apt-transport-https software-properties-common
+            wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+            dpkg -i packages-microsoft-prod.deb
+            apt-get update -qq
+            apt-get install -y powershell
+          else
+            echo "pwsh already available: $(pwsh --version)"
+          fi
+
+      - name: Create minimal config
+        run: |
+          mkdir -p config
+          cat > config/tracked-repositories.json << 'EOF'
+          {
+            "version": 1,
+            "contributor": "test-user",
+            "default_sla_hours": 24,
+            "repositories": [
+              {
+                "owner": "actions",
+                "repo": "checkout",
+                "package": null,
+                "status_label": "Active",
+                "maintainer_needed_signal": "Well maintained",
+                "tracked_pr_numbers": [],
+                "review_sla_base_name": "review-sla-checkout"
+              }
+            ]
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: config/tracked-repositories.json
+          evidence-dir: evidence-test-basic
+        continue-on-error: true
+
+      - name: Assert manifest-json output is set
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "manifest-json: $MANIFEST_JSON"
+          if [ -z "$MANIFEST_JSON" ]; then
+            echo "FAIL: manifest-json output is empty"
+            exit 1
+          fi
+          echo "PASS: manifest-json output is set to $MANIFEST_JSON"
+
+      - name: Assert manifest.json file exists
+        env:
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "Checking for manifest file at: $MANIFEST_JSON"
+          if [ ! -f "$MANIFEST_JSON" ]; then
+            echo "FAIL: manifest.json file not found at $MANIFEST_JSON"
+            ls -la evidence-test-basic/ 2>/dev/null || echo "(directory does not exist)"
+            exit 1
+          fi
+          echo "PASS: manifest.json exists"
+
+      - name: Assert health-json output is set
+        env:
+          HEALTH_JSON: ${{ steps.action.outputs.health-json }}
+        run: |
+          echo "health-json: $HEALTH_JSON"
+          if [ -z "$HEALTH_JSON" ]; then
+            echo "FAIL: health-json output is empty"
+            exit 1
+          fi
+          echo "PASS: health-json output is set to $HEALTH_JSON"
+
+      - name: Assert critical-count output is a number
+        env:
+          CRITICAL_COUNT: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "critical-count: $CRITICAL_COUNT"
+          if ! echo "$CRITICAL_COUNT" | grep -qE '^[0-9]+$'; then
+            echo "FAIL: critical-count is not a non-negative integer: '$CRITICAL_COUNT'"
+            exit 1
+          fi
+          echo "PASS: critical-count=$CRITICAL_COUNT"
+
+      - name: Assert avg-health output is a number
+        env:
+          AVG_HEALTH: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "avg-health: $AVG_HEALTH"
+          if ! echo "$AVG_HEALTH" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+            echo "FAIL: avg-health is not a non-negative number: '$AVG_HEALTH'"
+            exit 1
+          fi
+          echo "PASS: avg-health=$AVG_HEALTH"

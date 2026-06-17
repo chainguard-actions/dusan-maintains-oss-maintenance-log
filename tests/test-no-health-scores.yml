@@ -1,0 +1,98 @@
+name: Test with compute-health-scores disabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q powershell
+          fi
+          pwsh --version
+
+      - name: Create minimal config file
+        run: |
+          mkdir -p /tmp/oss-nohealthtest-config
+          cat > /tmp/oss-nohealthtest-config/tracked-repositories.json <<'EOF'
+          {
+            "version": 1,
+            "contributor": "test-user",
+            "default_sla_hours": 24,
+            "repositories": [
+              {
+                "owner": "actions",
+                "repo": "checkout",
+                "package": null,
+                "status_label": "Active",
+                "maintainer_needed_signal": "Actively maintained by GitHub",
+                "tracked_pr_numbers": [],
+                "review_sla_base_name": "review-sla-checkout"
+              }
+            ]
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: /tmp/oss-nohealthtest-config/tracked-repositories.json
+          evidence-dir: /tmp/oss-nohealthtest-evidence
+          compute-health-scores: "false"
+
+      - name: Assert manifest-json output is set
+        env:
+          ACTUAL: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "actual manifest-json: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: manifest-json output is empty"
+            exit 1
+          fi
+          echo "PASS: manifest-json=$ACTUAL"
+
+      - name: Assert manifest.json file exists
+        run: |
+          if [ ! -f "/tmp/oss-nohealthtest-evidence/manifest.json" ]; then
+            echo "FAIL: manifest.json not found in evidence dir"
+            ls -la /tmp/oss-nohealthtest-evidence/ || echo "(directory does not exist)"
+            exit 1
+          fi
+          echo "PASS: manifest.json exists"
+
+      - name: Assert critical-count output is set (should be 0 when no health file)
+        env:
+          ACTUAL: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "actual critical-count: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: critical-count output is empty"
+            exit 1
+          fi
+          if ! echo "$ACTUAL" | grep -qE '^[0-9]+$'; then
+            echo "FAIL: critical-count is not a non-negative integer: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS: critical-count=$ACTUAL"
+
+      - name: Assert avg-health output is set (should be 0 when no health file)
+        env:
+          ACTUAL: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "actual avg-health: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: avg-health output is empty"
+            exit 1
+          fi
+          if ! echo "$ACTUAL" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+            echo "FAIL: avg-health is not a valid number: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS: avg-health=$ACTUAL"

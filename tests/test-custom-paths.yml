@@ -1,0 +1,101 @@
+name: Test custom evidence-dir and config-file inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q powershell
+          fi
+          pwsh --version
+
+      - name: Create minimal config file
+        run: |
+          mkdir -p /tmp/oss-test-config
+          cat > /tmp/oss-test-config/tracked-repositories.json <<'EOF'
+          {
+            "version": 1,
+            "contributor": "test-user",
+            "default_sla_hours": 24,
+            "repositories": [
+              {
+                "owner": "actions",
+                "repo": "checkout",
+                "package": null,
+                "status_label": "Active",
+                "maintainer_needed_signal": "Actively maintained by GitHub",
+                "tracked_pr_numbers": [],
+                "review_sla_base_name": "review-sla-checkout"
+              }
+            ]
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: /tmp/oss-test-config/tracked-repositories.json
+          evidence-dir: /tmp/oss-test-evidence
+
+      - name: Assert manifest-json output points to custom dir
+        env:
+          ACTUAL: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "actual manifest-json: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: manifest-json output is empty"
+            exit 1
+          fi
+          if [[ "$ACTUAL" != *"oss-test-evidence"* ]]; then
+            echo "FAIL: manifest-json path does not reference custom evidence dir: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS: manifest-json=$ACTUAL"
+
+      - name: Assert manifest.json file exists in custom dir
+        run: |
+          if [ ! -f "/tmp/oss-test-evidence/manifest.json" ]; then
+            echo "FAIL: manifest.json not found in custom evidence dir"
+            ls -la /tmp/oss-test-evidence/ || echo "(directory does not exist)"
+            exit 1
+          fi
+          echo "PASS: manifest.json found in custom evidence dir"
+
+      - name: Assert manifest.json is valid JSON
+        run: |
+          if ! python3 -c "import json; json.load(open('/tmp/oss-test-evidence/manifest.json'))"; then
+            echo "FAIL: manifest.json is not valid JSON"
+            exit 1
+          fi
+          echo "PASS: manifest.json is valid JSON"
+
+      - name: Assert critical-count output is set
+        env:
+          ACTUAL: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "actual critical-count: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: critical-count output is empty"
+            exit 1
+          fi
+          echo "PASS: critical-count=$ACTUAL"
+
+      - name: Assert avg-health output is set
+        env:
+          ACTUAL: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "actual avg-health: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: avg-health output is empty"
+            exit 1
+          fi
+          echo "PASS: avg-health=$ACTUAL"

@@ -1,0 +1,88 @@
+name: Test basic usage with default config
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q powershell
+          fi
+          pwsh --version
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: config/tracked-repositories.json
+          evidence-dir: evidence-test-basic
+
+      - name: Assert manifest-json output is set
+        env:
+          ACTUAL: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "actual manifest-json: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: manifest-json output is empty"
+            exit 1
+          fi
+          echo "PASS: manifest-json=$ACTUAL"
+
+      - name: Assert manifest.json file exists
+        env:
+          MANIFEST: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "Checking for manifest at: $MANIFEST"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "FAIL: manifest.json file not found at $MANIFEST"
+            exit 1
+          fi
+          echo "PASS: manifest.json exists"
+
+      - name: Assert health-json output is set
+        env:
+          ACTUAL: ${{ steps.action.outputs.health-json }}
+        run: |
+          echo "actual health-json: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: health-json output is empty"
+            exit 1
+          fi
+          echo "PASS: health-json=$ACTUAL"
+
+      - name: Assert critical-count output is a number
+        env:
+          ACTUAL: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "actual critical-count: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: critical-count output is empty"
+            exit 1
+          fi
+          if ! echo "$ACTUAL" | grep -qE '^[0-9]+$'; then
+            echo "FAIL: critical-count is not a non-negative integer: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS: critical-count=$ACTUAL"
+
+      - name: Assert avg-health output is a number
+        env:
+          ACTUAL: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "actual avg-health: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: avg-health output is empty"
+            exit 1
+          fi
+          if ! echo "$ACTUAL" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+            echo "FAIL: avg-health is not a valid number: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS: avg-health=$ACTUAL"

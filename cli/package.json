@@ -1,0 +1,58 @@
+{
+  "name": "oss-health-scan",
+  "version": "1.3.0",
+  "description": "Scan npm dependencies for abandoned packages, outdated versions (libyear), and known CVEs (OSV.dev). Health scores 0-100, SARIF for GitHub Code Scanning, zero dependencies.",
+  "main": "./lib/api.js",
+  "exports": {
+    ".": "./lib/api.js",
+    "./scoring": "./lib/scoring.js",
+    "./sarif": "./lib/sarif.js",
+    "./outdated": "./lib/outdated.js",
+    "./osv": "./lib/osv.js"
+  },
+  "bin": {
+    "oss-health-scan": "./bin/scan.js"
+  },
+  "keywords": [
+    "npm",
+    "dependencies",
+    "health",
+    "abandoned",
+    "unmaintained",
+    "security",
+    "audit",
+    "maintenance",
+    "oss",
+    "scanner",
+    "supply-chain",
+    "deprecated",
+    "dead-packages",
+    "outdated",
+    "libyear",
+    "cve",
+    "osv",
+    "vulnerability"
+  ],
+  "author": "dusan-maintains",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dusan-maintains/oss-maintenance-log.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/dusan-maintains/oss-maintenance-log/tree/main/cli#readme",
+  "bugs": {
+    "url": "https://github.com/dusan-maintains/oss-maintenance-log/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md"
+  ]
+}

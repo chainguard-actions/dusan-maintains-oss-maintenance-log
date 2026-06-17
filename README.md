@@ -10,6 +10,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 |---------|-----|-----------------|
 | v1.2.0 | [`v1.2.0`](https://github.com/chainguard-actions/dusan-maintains-oss-maintenance-log/tree/v1.2.0) | [`cadd7bc`](https://github.com/dusan-maintains/oss-maintenance-log/commit/cadd7bcea7966f0dc9461bd09f79fea9dce10a6e) |
 | v1.3.0 | [`v1.3.0`](https://github.com/chainguard-actions/dusan-maintains-oss-maintenance-log/tree/v1.3.0) | [`92ea033`](https://github.com/dusan-maintains/oss-maintenance-log/commit/92ea033972d1c82fe95f74e181ef8e00671112ba) |
+| v1.6.0 | [`v1.6.0`](https://github.com/chainguard-actions/dusan-maintains-oss-maintenance-log/tree/v1.6.0) | [`16fd423`](https://github.com/dusan-maintains/oss-maintenance-log/commit/16fd4234f3cb32891e9ca12f25b1b6faead596de) |
 
 ## Privacy
 

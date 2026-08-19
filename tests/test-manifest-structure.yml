@@ -1,0 +1,96 @@
+name: Test manifest structure and repository tracking
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell if not present
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb" \
+              -O /tmp/packages-microsoft-prod.deb
+            sudo dpkg -i /tmp/packages-microsoft-prod.deb
+            sudo apt-get update -q
+            sudo apt-get install -y -q powershell
+          fi
+          pwsh --version
+
+      - name: Set up scripts symlink at workspace root
+        run: |
+          # The action uses ./scripts/ relative to the working directory (workspace root)
+          # but the scripts live in action/scripts/ — create a symlink so the path resolves
+          if [ ! -e "$GITHUB_WORKSPACE/scripts" ]; then
+            ln -sf "$GITHUB_WORKSPACE/action/scripts" "$GITHUB_WORKSPACE/scripts"
+          fi
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: ${{ github.workspace }}/tests/fixtures/config/tracked-repositories.json
+          evidence-dir: /tmp/test-evidence-manifest
+
+      - name: Assert manifest.json has expected structure
+        run: |
+          MANIFEST="/tmp/test-evidence-manifest/manifest.json"
+          echo "Checking manifest structure..."
+          python3 << 'PYEOF'
+          import json, sys
+          with open('/tmp/test-evidence-manifest/manifest.json') as f:
+              data = json.load(f)
+          required_keys = ['schema_version', 'run_started_at_utc', 'run_completed_at_utc', 'run_status', 'summary', 'repositories']
+          missing = [k for k in required_keys if k not in data]
+          if missing:
+              print('FAIL: missing keys in manifest: ' + str(missing))
+              sys.exit(1)
+          print('PASS: all required keys present: ' + str(required_keys))
+          PYEOF
+
+      - name: Assert manifest summary has tracked_repositories count
+        run: |
+          python3 << 'PYEOF'
+          import json, sys
+          with open('/tmp/test-evidence-manifest/manifest.json') as f:
+              data = json.load(f)
+          summary = data.get('summary', {})
+          tracked = summary.get('tracked_repositories', -1)
+          print('tracked_repositories: ' + str(tracked))
+          if tracked != 1:
+              print('FAIL: expected tracked_repositories=1, got ' + str(tracked))
+              sys.exit(1)
+          print('PASS: tracked_repositories=1 as expected')
+          PYEOF
+
+      - name: Assert manifest repositories list contains actions/checkout
+        run: |
+          python3 << 'PYEOF'
+          import json, sys
+          with open('/tmp/test-evidence-manifest/manifest.json') as f:
+              data = json.load(f)
+          repos = data.get('repositories', [])
+          print('repositories count: ' + str(len(repos)))
+          if len(repos) == 0:
+              print('FAIL: no repositories in manifest')
+              sys.exit(1)
+          repo_names = [r.get('repository', '') for r in repos]
+          print('repository names: ' + str(repo_names))
+          if 'actions/checkout' not in repo_names:
+              print('FAIL: actions/checkout not found in repositories: ' + str(repo_names))
+              sys.exit(1)
+          print('PASS: actions/checkout found in manifest repositories')
+          PYEOF
+
+      - name: Assert manifest.md file is also created
+        run: |
+          MD_PATH="/tmp/test-evidence-manifest/manifest.md"
+          echo "Checking for $MD_PATH"
+          if [ ! -f "$MD_PATH" ]; then
+            echo "FAIL: manifest.md not found"
+            ls -la /tmp/test-evidence-manifest/ || echo "(listing failed)"
+            exit 1
+          fi
+          echo "PASS: manifest.md exists"
+          head -5 "$MD_PATH"

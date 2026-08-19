@@ -61,18 +61,16 @@ runs:
         EVIDENCE_DIR: ${{ inputs.evidence-dir }}
         CONFIG_FILE: ${{ inputs.config-file }}
       run: |
-        $dir = $env:EVIDENCE_DIR
-        $cfg = $env:CONFIG_FILE
+        $dir = $env:EVIDENCE_DIR -replace '[\r\n]', ''
+        $cfg = $env:CONFIG_FILE -replace '[\r\n]', ''
         ./scripts/update-all-evidence.ps1 -OutDir $dir -ConfigPath $cfg
 
         # Export outputs for downstream steps
-        $healthPath = Join-Path $dir "health-scores.json"
-        $manifestPath = Join-Path $dir "manifest.json"
+        $healthPath = (Join-Path $dir "health-scores.json") -replace '[\r\n]', ''
+        $manifestPath = (Join-Path $dir "manifest.json") -replace '[\r\n]', ''
 
-        $safeHealthPath = $healthPath -replace '[\r\n]', ''
-        $safeManifestPath = $manifestPath -replace '[\r\n]', ''
-        "health-json=$safeHealthPath" >> $env:GITHUB_OUTPUT
-        "manifest-json=$safeManifestPath" >> $env:GITHUB_OUTPUT
+        "health-json=$healthPath" >> $env:GITHUB_OUTPUT
+        "manifest-json=$manifestPath" >> $env:GITHUB_OUTPUT
 
         if (Test-Path $healthPath) {
           $health = Get-Content $healthPath -Raw | ConvertFrom-Json

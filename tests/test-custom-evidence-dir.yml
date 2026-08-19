@@ -7,86 +7,83 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install PowerShell
+      - name: Install PowerShell if not present
         run: |
           if ! command -v pwsh &>/dev/null; then
-            echo "Installing PowerShell..."
-            apt-get update -qq
-            apt-get install -y wget apt-transport-https software-properties-common
-            wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
-            dpkg -i packages-microsoft-prod.deb
-            apt-get update -qq
-            apt-get install -y powershell
-          else
-            echo "pwsh already available: $(pwsh --version)"
+            wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb" \
+              -O /tmp/packages-microsoft-prod.deb
+            sudo dpkg -i /tmp/packages-microsoft-prod.deb
+            sudo apt-get update -q
+            sudo apt-get install -y -q powershell
           fi
+          pwsh --version
 
-      - name: Create minimal config
+      - name: Set up scripts symlink at workspace root
         run: |
-          mkdir -p config
-          cat > config/tracked-repositories.json << 'EOF'
-          {
-            "version": 1,
-            "contributor": "test-user",
-            "default_sla_hours": 24,
-            "repositories": [
-              {
-                "owner": "actions",
-                "repo": "checkout",
-                "package": null,
-                "status_label": "Active",
-                "maintainer_needed_signal": "Well maintained",
-                "tracked_pr_numbers": [],
-                "review_sla_base_name": "review-sla-checkout"
-              }
-            ]
-          }
-          EOF
+          # The action uses ./scripts/ relative to the working directory (workspace root)
+          # but the scripts live in action/scripts/ — create a symlink so the path resolves
+          if [ ! -e "$GITHUB_WORKSPACE/scripts" ]; then
+            ln -sf "$GITHUB_WORKSPACE/action/scripts" "$GITHUB_WORKSPACE/scripts"
+          fi
 
       - id: action
         uses: .
         with:
           github-token: ${{ github.token }}
-          config-file: config/tracked-repositories.json
-          evidence-dir: my-custom-evidence
-        continue-on-error: true
+          config-file: ${{ github.workspace }}/tests/fixtures/config/tracked-repositories.json
+          evidence-dir: /tmp/custom-evidence-dir
 
-      - name: Assert manifest-json output references custom directory
+      - name: Assert evidence directory was created
+        run: |
+          echo "Checking /tmp/custom-evidence-dir exists"
+          if [ ! -d "/tmp/custom-evidence-dir" ]; then
+            echo "FAIL: custom evidence directory was not created"
+            exit 1
+          fi
+          echo "PASS: custom evidence directory exists"
+          ls -la /tmp/custom-evidence-dir/
+
+      - name: Assert manifest.json is in custom evidence dir
+        run: |
+          EXPECTED="/tmp/custom-evidence-dir/manifest.json"
+          echo "Checking for $EXPECTED"
+          if [ ! -f "$EXPECTED" ]; then
+            echo "FAIL: manifest.json not found in custom evidence dir"
+            ls -la /tmp/custom-evidence-dir/ || echo "(listing failed)"
+            exit 1
+          fi
+          echo "PASS: manifest.json found in custom evidence dir"
+
+      - name: Assert manifest-json output points to custom dir
         env:
-          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+          MANIFEST: ${{ steps.action.outputs.manifest-json }}
         run: |
-          echo "manifest-json: $MANIFEST_JSON"
-          if [ -z "$MANIFEST_JSON" ]; then
-            echo "FAIL: manifest-json output is empty"
+          echo "manifest-json output: $MANIFEST"
+          EXPECTED="/tmp/custom-evidence-dir/manifest.json"
+          if [ "$MANIFEST" != "$EXPECTED" ]; then
+            echo "FAIL: expected manifest-json='$EXPECTED', got '$MANIFEST'"
             exit 1
           fi
-          if ! echo "$MANIFEST_JSON" | grep -q "my-custom-evidence"; then
-            echo "FAIL: manifest-json path does not reference custom evidence dir 'my-custom-evidence': $MANIFEST_JSON"
-            exit 1
-          fi
-          echo "PASS: manifest-json references custom directory"
+          echo "PASS: manifest-json output correctly points to $MANIFEST"
 
-      - name: Assert health-json output references custom directory
-        env:
-          HEALTH_JSON: ${{ steps.action.outputs.health-json }}
+      - name: Assert manifest.json contains schema_version
         run: |
-          echo "health-json: $HEALTH_JSON"
-          if [ -z "$HEALTH_JSON" ]; then
-            echo "FAIL: health-json output is empty"
+          MANIFEST="/tmp/custom-evidence-dir/manifest.json"
+          SCHEMA_VERSION=$(python3 -c "import json; d=json.load(open('$MANIFEST')); print(d.get('schema_version',''))" 2>&1)
+          echo "schema_version: $SCHEMA_VERSION"
+          if [ "$SCHEMA_VERSION" != "1" ]; then
+            echo "FAIL: expected schema_version=1, got '$SCHEMA_VERSION'"
             exit 1
           fi
-          if ! echo "$HEALTH_JSON" | grep -q "my-custom-evidence"; then
-            echo "FAIL: health-json path does not reference custom evidence dir 'my-custom-evidence': $HEALTH_JSON"
-            exit 1
-          fi
-          echo "PASS: health-json references custom directory"
+          echo "PASS: schema_version is 1"
 
-      - name: Assert manifest.json file exists in custom directory
+      - name: Assert manifest.json contains run_status
         run: |
-          echo "Checking for manifest.json in my-custom-evidence/"
-          if [ ! -f "my-custom-evidence/manifest.json" ]; then
-            echo "FAIL: manifest.json not found in my-custom-evidence/"
-            ls -la my-custom-evidence/ 2>/dev/null || echo "(directory does not exist)"
+          MANIFEST="/tmp/custom-evidence-dir/manifest.json"
+          RUN_STATUS=$(python3 -c "import json; d=json.load(open('$MANIFEST')); print(d.get('run_status',''))" 2>&1)
+          echo "run_status: $RUN_STATUS"
+          if [ -z "$RUN_STATUS" ]; then
+            echo "FAIL: run_status is empty"
             exit 1
           fi
-          echo "PASS: manifest.json found in custom evidence directory"
+          echo "PASS: run_status is '$RUN_STATUS'"

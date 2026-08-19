@@ -58,20 +58,18 @@ runs:
       shell: pwsh
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        EVIDENCE_DIR: ${{ inputs.evidence-dir }}
-        CONFIG_FILE: ${{ inputs.config-file }}
+        INPUT_EVIDENCE_DIR: ${{ inputs.evidence-dir }}
+        INPUT_CONFIG_FILE: ${{ inputs.config-file }}
       run: |
-        $dir = $env:EVIDENCE_DIR
-        $cfg = $env:CONFIG_FILE
+        $dir = $env:INPUT_EVIDENCE_DIR
+        $cfg = $env:INPUT_CONFIG_FILE
         ./scripts/update-all-evidence.ps1 -OutDir $dir -ConfigPath $cfg
 
-        # Export outputs for downstream steps
+        # Export outputs for downstream steps — sanitize paths to prevent newline injection
         $healthPath = Join-Path $dir "health-scores.json"
         $manifestPath = Join-Path $dir "manifest.json"
-
-        # Sanitize paths to prevent newline injection into GITHUB_OUTPUT
-        $safeHealthPath = $healthPath -replace "`r|`n", ""
-        $safeManifestPath = $manifestPath -replace "`r|`n", ""
+        $safeHealthPath = $healthPath -replace '[\r\n]', ''
+        $safeManifestPath = $manifestPath -replace '[\r\n]', ''
 
         "health-json=$safeHealthPath" >> $env:GITHUB_OUTPUT
         "manifest-json=$safeManifestPath" >> $env:GITHUB_OUTPUT

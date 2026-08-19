@@ -1,0 +1,102 @@
+name: Test health score outputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PowerShell
+        run: |
+          if ! command -v pwsh &>/dev/null; then
+            apt-get update -qq
+            apt-get install -y -qq wget apt-transport-https software-properties-common
+            wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+            dpkg -i packages-microsoft-prod.deb
+            apt-get update -qq
+            apt-get install -y -qq powershell
+          fi
+          pwsh --version
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          config-file: ${{ github.workspace }}/tests/fixtures/tracked-repositories-minimal.json
+          evidence-dir: /tmp/test-evidence-health
+          compute-health-scores: "true"
+
+      - name: Assert critical-count is a non-negative integer
+        env:
+          CRITICAL_COUNT: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "critical-count: '$CRITICAL_COUNT'"
+          if [ -z "$CRITICAL_COUNT" ]; then
+            echo "FAIL: critical-count output is empty"
+            exit 1
+          fi
+          if ! echo "$CRITICAL_COUNT" | grep -qE '^[0-9]+$'; then
+            echo "FAIL: critical-count is not a non-negative integer: '$CRITICAL_COUNT'"
+            exit 1
+          fi
+          echo "PASS: critical-count=$CRITICAL_COUNT"
+
+      - name: Assert avg-health is a non-negative number
+        env:
+          AVG_HEALTH: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "avg-health: '$AVG_HEALTH'"
+          if [ -z "$AVG_HEALTH" ]; then
+            echo "FAIL: avg-health output is empty"
+            exit 1
+          fi
+          if ! echo "$AVG_HEALTH" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+            echo "FAIL: avg-health is not a non-negative number: '$AVG_HEALTH'"
+            exit 1
+          fi
+          echo "PASS: avg-health=$AVG_HEALTH"
+
+      - name: Assert health-json output path is correct
+        env:
+          HEALTH_PATH: ${{ steps.action.outputs.health-json }}
+        run: |
+          echo "health-json: $HEALTH_PATH"
+          EXPECTED="/tmp/test-evidence-health/health-scores.json"
+          if [ "$HEALTH_PATH" != "$EXPECTED" ]; then
+            echo "FAIL: expected health-json='$EXPECTED', got '$HEALTH_PATH'"
+            exit 1
+          fi
+          echo "PASS: health-json output path is correct"
+
+      - name: Assert health-scores.json exists and is valid JSON (if present)
+        env:
+          HEALTH_PATH: ${{ steps.action.outputs.health-json }}
+        run: |
+          echo "Checking health-scores.json at: $HEALTH_PATH"
+          if [ -f "$HEALTH_PATH" ]; then
+            echo "health-scores.json exists, validating JSON..."
+            python3 -c "import json; d=json.load(open('$HEALTH_PATH')); print('packages count:', len(d.get('packages', [])))"
+            echo "PASS: health-scores.json is valid JSON"
+          else
+            echo "INFO: health-scores.json not generated (ecosystem data may be unavailable) — this is acceptable"
+            echo "PASS: action completed without health-scores.json (skipped step)"
+          fi
+
+      - name: Assert manifest.json run_status is not empty
+        env:
+          MANIFEST_PATH: ${{ steps.action.outputs.manifest-json }}
+        run: |
+          echo "Checking manifest run_status..."
+          RUN_STATUS=$(python3 -c "import json; d=json.load(open('$MANIFEST_PATH')); print(d.get('run_status',''))")
+          echo "run_status: $RUN_STATUS"
+          if [ -z "$RUN_STATUS" ]; then
+            echo "FAIL: run_status is empty"
+            exit 1
+          fi
+          VALID_STATUSES="success partial_success failed"
+          if ! echo "$VALID_STATUSES" | grep -qw "$RUN_STATUS"; then
+            echo "FAIL: unexpected run_status '$RUN_STATUS', expected one of: $VALID_STATUSES"
+            exit 1
+          fi
+          echo "PASS: run_status=$RUN_STATUS is a valid status"

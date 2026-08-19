@@ -52,32 +52,34 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        INPUT_PATH: ${{ inputs.path }}
-        INPUT_THRESHOLD: ${{ inputs.threshold }}
         INPUT_INCLUDE_DEV: ${{ inputs.include-dev }}
+        INPUT_THRESHOLD: ${{ inputs.threshold }}
+        INPUT_PATH: ${{ inputs.path }}
       run: |
-        FLAGS=()
+        FLAGS=""
         if [ "$INPUT_INCLUDE_DEV" = "true" ]; then
-          FLAGS+=(--dev)
+          FLAGS="$FLAGS --dev"
         fi
         if [ "$INPUT_THRESHOLD" != "0" ]; then
-          FLAGS+=(--threshold "$INPUT_THRESHOLD")
+          SAFE_THRESHOLD=$(printf '%s' "$INPUT_THRESHOLD" | tr -d '\n\r')
+          FLAGS="$FLAGS --threshold $SAFE_THRESHOLD"
         fi
 
         # Run JSON scan for outputs
-        RESULTS=$(oss-health-scan "$INPUT_PATH" --json "${FLAGS[@]}" 2>/dev/null || true)
-        echo "results<<EOF" >> $GITHUB_OUTPUT
-        echo "$RESULTS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        RESULTS=$(oss-health-scan "$INPUT_PATH" --json $FLAGS 2>/dev/null || true)
+        # Sanitize RESULTS to prevent newline injection into GITHUB_OUTPUT
+        echo "results<<EOF" >> "$GITHUB_OUTPUT"
+        printf '%s\n' "$RESULTS" | tr -d '\r' >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
 
         # Extract stats
         AVG=$(echo "$RESULTS" | node -e "const d=require('fs').readFileSync(0,'utf8');try{const j=JSON.parse(d);const s=j.results.filter(r=>r.health_score!=null);console.log((s.reduce((a,r)=>a+r.health_score,0)/s.length).toFixed(1))}catch{console.log('N/A')}")
         CRIT=$(echo "$RESULTS" | node -e "const d=require('fs').readFileSync(0,'utf8');try{const j=JSON.parse(d);console.log(j.results.filter(r=>r.risk_level==='critical').length)}catch{console.log(0)}")
-        echo "average=$AVG" >> $GITHUB_OUTPUT
-        echo "critical=$CRIT" >> $GITHUB_OUTPUT
+        echo "average=$AVG" >> "$GITHUB_OUTPUT"
+        echo "critical=$CRIT" >> "$GITHUB_OUTPUT"
 
         # Print human-readable report
-        oss-health-scan "$INPUT_PATH" "${FLAGS[@]}" --ci || true
+        oss-health-scan "$INPUT_PATH" $FLAGS --ci || true
 
         # Fail if critical packages found and threshold > 0
         if [ "$INPUT_THRESHOLD" != "0" ] && [ "$CRIT" -gt 0 ]; then

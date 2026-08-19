@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "contributor": "test-user",
+  "default_sla_hours": 24,
+  "repositories": [
+    {
+      "owner": "actions",
+      "repo": "checkout",
+      "package": null,
+      "status_label": "Active",
+      "maintainer_needed_signal": "Well-maintained by GitHub",
+      "tracked_pr_numbers": [],
+      "review_sla_base_name": "review-sla-checkout"
+    }
+  ]
+}

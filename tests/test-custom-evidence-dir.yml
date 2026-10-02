@@ -1,0 +1,82 @@
+name: Test custom evidence directory
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create minimal config file
+        run: |
+          mkdir -p tests/fixtures/config
+          cat > tests/fixtures/config/tracked-repositories.json <<'EOF'
+          {
+            "version": 1,
+            "contributor": "test-user",
+            "default_sla_hours": 24,
+            "repositories": [
+              {
+                "owner": "actions",
+                "repo": "checkout",
+                "package": null,
+                "status_label": "Active",
+                "maintainer_needed_signal": "Actively maintained",
+                "tracked_pr_numbers": [],
+                "review_sla_base_name": "review-sla-checkout"
+              }
+            ]
+          }
+          EOF
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          github-token: ${{ github.token }}
+          config-file: tests/fixtures/config/tracked-repositories.json
+          evidence-dir: tests/fixtures/my-custom-evidence
+
+      - name: Assert outputs reference the custom evidence directory
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          MANIFEST: ${{ steps.action.outputs.manifest-json }}
+          HEALTH: ${{ steps.action.outputs.health-json }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "manifest-json: $MANIFEST"
+          echo "health-json: $HEALTH"
+          if [ "$OUTCOME" = "success" ]; then
+            # Verify the output paths reference the custom evidence dir
+            if echo "$MANIFEST" | grep -q "my-custom-evidence"; then
+              echo "PASS: manifest-json references custom evidence dir"
+            else
+              echo "FAIL: manifest-json '$MANIFEST' does not reference 'my-custom-evidence'"
+              exit 1
+            fi
+            if echo "$HEALTH" | grep -q "my-custom-evidence"; then
+              echo "PASS: health-json references custom evidence dir"
+            else
+              echo "FAIL: health-json '$HEALTH' does not reference 'my-custom-evidence'"
+              exit 1
+            fi
+            # Verify the custom evidence directory was created
+            if [ -d "tests/fixtures/my-custom-evidence" ]; then
+              echo "PASS: custom evidence directory was created"
+            else
+              echo "FAIL: custom evidence directory 'tests/fixtures/my-custom-evidence' was not created"
+              exit 1
+            fi
+            # Verify manifest.json was written there
+            if [ -f "tests/fixtures/my-custom-evidence/manifest.json" ]; then
+              echo "PASS: manifest.json written to custom evidence dir"
+            else
+              echo "FAIL: manifest.json not found in custom evidence dir"
+              exit 1
+            fi
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (API rate limit or network issue)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

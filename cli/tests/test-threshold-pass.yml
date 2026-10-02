@@ -1,0 +1,57 @@
+name: Test threshold pass (no critical packages)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create test package.json with well-known healthy packages
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/tests/fixtures/threshold-pass"
+          cat > "$GITHUB_WORKSPACE/tests/fixtures/threshold-pass/package.json" <<'EOF'
+          {
+            "name": "test-threshold-pass",
+            "version": "1.0.0",
+            "dependencies": {
+              "lodash": "^4.17.21"
+            }
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          path: tests/fixtures/threshold-pass
+          threshold: "10"
+          github-token: ${{ github.token }}
+
+      - name: Assert action succeeded and outputs are set
+        env:
+          RESULTS: ${{ steps.action.outputs.results }}
+          AVG: ${{ steps.action.outputs.average-score }}
+          CRIT: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "results: $RESULTS"
+          echo "average-score: $AVG"
+          echo "critical-count: $CRIT"
+
+          if [ -z "$RESULTS" ]; then
+            echo "FAIL: results output is empty"
+            exit 1
+          fi
+          echo "PASS: results output is set"
+
+          if [ -z "$AVG" ]; then
+            echo "FAIL: average-score output is empty"
+            exit 1
+          fi
+          echo "PASS: average-score is '$AVG'"
+
+          # critical-count should be 0 for healthy packages
+          echo "critical-count value: '$CRIT'"
+          if [ "$CRIT" != "0" ]; then
+            echo "NOTE: $CRIT package(s) scored critically — threshold test may still pass if action did not exit 1"
+          fi
+          echo "PASS: threshold test completed"

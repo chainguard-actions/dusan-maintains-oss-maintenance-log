@@ -61,18 +61,16 @@ runs:
         INPUT_EVIDENCE_DIR: ${{ inputs.evidence-dir }}
         INPUT_CONFIG_FILE: ${{ inputs.config-file }}
       run: |
-        $dir = $env:INPUT_EVIDENCE_DIR
-        $cfg = $env:INPUT_CONFIG_FILE
+        $dir = $env:INPUT_EVIDENCE_DIR -replace '[\r\n]', ''
+        $cfg = $env:INPUT_CONFIG_FILE -replace '[\r\n]', ''
         ./scripts/update-all-evidence.ps1 -OutDir $dir -ConfigPath $cfg
 
         # Export outputs for downstream steps
         $healthPath = Join-Path $dir "health-scores.json"
         $manifestPath = Join-Path $dir "manifest.json"
 
-        # Sanitize paths before writing to GITHUB_OUTPUT (strip newlines)
         $safeHealthPath = $healthPath -replace '[\r\n]', ''
         $safeManifestPath = $manifestPath -replace '[\r\n]', ''
-
         "health-json=$safeHealthPath" >> $env:GITHUB_OUTPUT
         "manifest-json=$safeManifestPath" >> $env:GITHUB_OUTPUT
 
@@ -84,7 +82,6 @@ runs:
             [math]::Round(($scores | Measure-Object -Property health_score -Average).Average, 1)
           } else { 0 }
 
-          # critical and avg are computed from JSON data (integers/numbers), safe to write directly
           "critical-count=$critical" >> $env:GITHUB_OUTPUT
           "avg-health=$avg" >> $env:GITHUB_OUTPUT
         } else {

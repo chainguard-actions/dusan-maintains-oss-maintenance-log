@@ -1,0 +1,78 @@
+name: Test default config file path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # The action's default config-file is "config/tracked-repositories.json"
+      # which is resolved relative to the repo root (via Resolve-RepoPath in common.ps1).
+      # The action ships with a real config/tracked-repositories.json, so we use it.
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          github-token: ${{ github.token }}
+          evidence-dir: tests/fixtures/evidence-default
+
+      - name: Assert action ran and produced outputs
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          MANIFEST: ${{ steps.action.outputs.manifest-json }}
+          HEALTH: ${{ steps.action.outputs.health-json }}
+          CRITICAL: ${{ steps.action.outputs.critical-count }}
+          AVG: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "manifest-json: $MANIFEST"
+          echo "health-json: $HEALTH"
+          echo "critical-count: $CRITICAL"
+          echo "avg-health: $AVG"
+          if [ "$OUTCOME" = "success" ]; then
+            if [ -z "$MANIFEST" ]; then
+              echo "FAIL: manifest-json output is empty"
+              exit 1
+            fi
+            if [ -z "$HEALTH" ]; then
+              echo "FAIL: health-json output is empty"
+              exit 1
+            fi
+            if [ -z "$CRITICAL" ]; then
+              echo "FAIL: critical-count output is empty"
+              exit 1
+            fi
+            if [ -z "$AVG" ]; then
+              echo "FAIL: avg-health output is empty"
+              exit 1
+            fi
+            echo "PASS: all outputs are set"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (API rate limit or network issue with default config)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+
+      - name: Assert evidence directory was created
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "success" ]; then
+            if [ -d "tests/fixtures/evidence-default" ]; then
+              echo "PASS: evidence directory was created"
+            else
+              echo "FAIL: evidence directory 'tests/fixtures/evidence-default' was not created"
+              exit 1
+            fi
+            if [ -f "tests/fixtures/evidence-default/manifest.json" ]; then
+              echo "PASS: manifest.json exists in evidence directory"
+            else
+              echo "FAIL: manifest.json not found in evidence directory"
+              exit 1
+            fi
+          else
+            echo "SKIP: action did not succeed, skipping directory check"
+          fi

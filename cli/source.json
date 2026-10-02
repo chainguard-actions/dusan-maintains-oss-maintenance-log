@@ -2,6 +2,7 @@
   "owner": "dusan-maintains",
   "repo": "oss-maintenance-log",
   "version": "v1.3.0",
+  "path": "cli",
   "commit_sha": "92ea033972d1c82fe95f74e181ef8e00671112ba",
   "url": "https://github.com/dusan-maintains/oss-maintenance-log",
   "policy_sha": "d636be7e43ef829af6e853da6b3c7566db9f72fe",

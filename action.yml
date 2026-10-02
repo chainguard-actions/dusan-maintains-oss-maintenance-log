@@ -58,19 +58,23 @@ runs:
       shell: pwsh
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        EVIDENCE_DIR: ${{ inputs.evidence-dir }}
-        CONFIG_FILE: ${{ inputs.config-file }}
+        INPUT_EVIDENCE_DIR: ${{ inputs.evidence-dir }}
+        INPUT_CONFIG_FILE: ${{ inputs.config-file }}
       run: |
-        $dir = $env:EVIDENCE_DIR -replace '[\r\n]', ''
-        $cfg = $env:CONFIG_FILE -replace '[\r\n]', ''
+        $dir = $env:INPUT_EVIDENCE_DIR
+        $cfg = $env:INPUT_CONFIG_FILE
         ./scripts/update-all-evidence.ps1 -OutDir $dir -ConfigPath $cfg
 
         # Export outputs for downstream steps
-        $healthPath = (Join-Path $dir "health-scores.json") -replace '[\r\n]', ''
-        $manifestPath = (Join-Path $dir "manifest.json") -replace '[\r\n]', ''
+        $healthPath = Join-Path $dir "health-scores.json"
+        $manifestPath = Join-Path $dir "manifest.json"
 
-        "health-json=$healthPath" >> $env:GITHUB_OUTPUT
-        "manifest-json=$manifestPath" >> $env:GITHUB_OUTPUT
+        # Sanitize paths (strip newlines) before writing to GITHUB_OUTPUT
+        $safeHealthPath = $healthPath -replace '[\r\n]', ''
+        $safeManifestPath = $manifestPath -replace '[\r\n]', ''
+
+        "health-json=$safeHealthPath" >> $env:GITHUB_OUTPUT
+        "manifest-json=$safeManifestPath" >> $env:GITHUB_OUTPUT
 
         if (Test-Path $healthPath) {
           $health = Get-Content $healthPath -Raw | ConvertFrom-Json

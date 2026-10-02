@@ -1,0 +1,30 @@
+name: Test threshold zero (no enforcement)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        with:
+          path: tests/fixtures/basic
+          threshold: "0"
+          github-token: ${{ github.token }}
+
+      - name: Assert action succeeded with threshold=0
+        env:
+          RESULTS: ${{ steps.action.outputs.results }}
+          CRIT: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "results: $RESULTS"
+          echo "critical-count: $CRIT"
+          # With threshold=0, the action should never fail due to threshold
+          # Just verify outputs are present
+          if [ -z "$RESULTS" ]; then
+            echo "FAIL: results output is empty"
+            exit 1
+          fi
+          echo "PASS: action completed successfully with threshold=0"

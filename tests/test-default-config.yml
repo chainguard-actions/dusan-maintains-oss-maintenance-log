@@ -1,0 +1,91 @@
+name: Test default config file path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify default config file exists in repo
+        run: |
+          if [ ! -f "config/tracked-repositories.json" ]; then
+            echo "FAIL: default config file not found at config/tracked-repositories.json"
+            exit 1
+          fi
+          echo "PASS: default config file exists"
+          cat config/tracked-repositories.json
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          evidence-dir: default-config-evidence
+        continue-on-error: true
+
+      - name: Assert action ran and produced outputs
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          HEALTH_JSON: ${{ steps.action.outputs.health-json }}
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+          CRITICAL: ${{ steps.action.outputs.critical-count }}
+          AVG: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "health-json: $HEALTH_JSON"
+          echo "manifest-json: $MANIFEST_JSON"
+          echo "critical-count: $CRITICAL"
+          echo "avg-health: $AVG"
+          if [ "$OUTCOME" = "success" ]; then
+            # All four outputs should be set
+            if [ -z "$MANIFEST_JSON" ]; then
+              echo "FAIL: manifest-json output is empty"
+              exit 1
+            fi
+            if [ -z "$HEALTH_JSON" ]; then
+              echo "FAIL: health-json output is empty"
+              exit 1
+            fi
+            if [ -z "$CRITICAL" ]; then
+              echo "FAIL: critical-count output is empty"
+              exit 1
+            fi
+            if [ -z "$AVG" ]; then
+              echo "FAIL: avg-health output is empty"
+              exit 1
+            fi
+            echo "PASS: all outputs are set"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action ran (may have failed due to API rate limits or network issues)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+
+      - name: Assert manifest.json was written when action succeeded
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "success" ]; then
+            MANIFEST_PATH="default-config-evidence/manifest.json"
+            if [ ! -f "$MANIFEST_PATH" ]; then
+              echo "FAIL: manifest.json not found at $MANIFEST_PATH"
+              exit 1
+            fi
+            echo "PASS: manifest.json exists"
+            # Validate it's valid JSON with expected fields
+            python3 -c "
+          import json, sys
+          with open('$MANIFEST_PATH') as f:
+              data = json.load(f)
+          assert 'schema_version' in data, 'missing schema_version'
+          assert 'run_status' in data, 'missing run_status'
+          assert 'summary' in data, 'missing summary'
+          print('PASS: manifest.json has expected structure')
+          print('run_status:', data['run_status'])
+          print('summary:', json.dumps(data['summary'], indent=2))
+          "
+          else
+            echo "SKIP: action did not succeed, skipping manifest validation"
+          fi

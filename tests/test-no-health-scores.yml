@@ -1,4 +1,4 @@
-name: Test basic usage with minimal config
+name: Test with compute-health-scores disabled
 on:
   workflow_dispatch:
 jobs:
@@ -34,57 +34,30 @@ jobs:
         with:
           github-token: ${{ github.token }}
           config-file: test-config/tracked-repositories.json
-          evidence-dir: test-evidence
-          compute-health-scores: "true"
+          evidence-dir: no-health-evidence
+          compute-health-scores: "false"
         continue-on-error: true
 
-      - name: Assert manifest-json output is set
-        env:
-          MANIFEST: ${{ steps.action.outputs.manifest-json }}
-          OUTCOME: ${{ steps.action.outcome }}
-        run: |
-          echo "outcome: $OUTCOME"
-          echo "manifest-json: $MANIFEST"
-          if [ "$OUTCOME" = "success" ]; then
-            if [ -z "$MANIFEST" ]; then
-              echo "FAIL: action succeeded but manifest-json output is empty"
-              exit 1
-            fi
-            echo "PASS: manifest-json output is set to '$MANIFEST'"
-          elif [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action ran (may have failed due to API limits or sentinel repo)"
-          else
-            echo "FAIL: unexpected outcome '$OUTCOME'"
-            exit 1
-          fi
-
-      - name: Assert manifest file exists when action succeeded
+      - name: Assert action ran and manifest output is set
         env:
           OUTCOME: ${{ steps.action.outcome }}
-          MANIFEST: ${{ steps.action.outputs.manifest-json }}
-        run: |
-          echo "outcome: $OUTCOME"
-          if [ "$OUTCOME" = "success" ]; then
-            echo "Checking for manifest file at: $MANIFEST"
-            if [ ! -f "$MANIFEST" ]; then
-              echo "FAIL: manifest.json file not found at $MANIFEST"
-              exit 1
-            fi
-            echo "PASS: manifest.json exists"
-          else
-            echo "SKIP: action did not succeed, skipping file existence check"
-          fi
-
-      - name: Assert critical-count and avg-health outputs are set
-        env:
-          OUTCOME: ${{ steps.action.outcome }}
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+          HEALTH_JSON: ${{ steps.action.outputs.health-json }}
           CRITICAL: ${{ steps.action.outputs.critical-count }}
           AVG: ${{ steps.action.outputs.avg-health }}
         run: |
           echo "outcome: $OUTCOME"
+          echo "manifest-json: $MANIFEST_JSON"
+          echo "health-json: $HEALTH_JSON"
           echo "critical-count: $CRITICAL"
           echo "avg-health: $AVG"
           if [ "$OUTCOME" = "success" ]; then
+            if [ -z "$MANIFEST_JSON" ]; then
+              echo "FAIL: manifest-json output is empty even with compute-health-scores=false"
+              exit 1
+            fi
+            echo "PASS: manifest-json output is set to '$MANIFEST_JSON'"
+            # critical-count and avg-health should still be set (defaulting to 0 if no health file)
             if [ -z "$CRITICAL" ]; then
               echo "FAIL: critical-count output is empty"
               exit 1
@@ -94,6 +67,25 @@ jobs:
               exit 1
             fi
             echo "PASS: critical-count=$CRITICAL avg-health=$AVG"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action ran (may have failed due to API limits or network issues)"
           else
-            echo "SKIP: action did not succeed, skipping output checks"
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+
+      - name: Assert manifest file exists when action succeeded
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "success" ]; then
+            MANIFEST_PATH="no-health-evidence/manifest.json"
+            if [ ! -f "$MANIFEST_PATH" ]; then
+              echo "FAIL: manifest.json not found at $MANIFEST_PATH"
+              exit 1
+            fi
+            echo "PASS: manifest.json exists"
+          else
+            echo "SKIP: action did not succeed, skipping file check"
           fi

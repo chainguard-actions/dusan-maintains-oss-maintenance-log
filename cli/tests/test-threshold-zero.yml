@@ -1,0 +1,56 @@
+name: Test threshold zero does not fail
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # With threshold=0 the action should never exit 1 due to critical packages
+      - id: action
+        uses: .
+        with:
+          path: tests/fixtures/basic
+          threshold: "0"
+          include-dev: "false"
+          github-token: ${{ github.token }}
+
+      - name: Assert action succeeded with threshold=0
+        run: |
+          echo "PASS: action completed without failure (threshold=0 never triggers exit)"
+
+      - name: Assert critical-count is a non-negative integer
+        env:
+          CRIT: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "critical-count: $CRIT"
+          if [ -z "$CRIT" ]; then
+            echo "FAIL: critical-count output is empty"
+            exit 1
+          fi
+          # Must be a non-negative integer (0 or more)
+          if ! echo "$CRIT" | grep -qE '^[0-9]+$'; then
+            echo "FAIL: critical-count '$CRIT' is not a non-negative integer"
+            exit 1
+          fi
+          echo "PASS: critical-count is a valid non-negative integer: $CRIT"
+
+      - name: Assert average-score is a number or N/A
+        env:
+          AVG: ${{ steps.action.outputs.average-score }}
+        run: |
+          echo "average-score: $AVG"
+          if [ -z "$AVG" ]; then
+            echo "FAIL: average-score output is empty"
+            exit 1
+          fi
+          # Must be a decimal number or "N/A"
+          if echo "$AVG" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+            echo "PASS: average-score is a numeric value: $AVG"
+          elif [ "$AVG" = "N/A" ]; then
+            echo "PASS: average-score is N/A (no scoreable packages)"
+          else
+            echo "FAIL: average-score '$AVG' is not a valid value"
+            exit 1
+          fi

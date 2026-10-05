@@ -1,4 +1,4 @@
-name: Test custom evidence directory
+name: Test with compute-health-scores disabled
 on:
   workflow_dispatch:
 jobs:
@@ -7,10 +7,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create minimal custom config for faster run
+      - name: Create minimal custom config
         run: |
-          mkdir -p /tmp/oss-evidence-dir-test/config
-          cat > /tmp/oss-evidence-dir-test/config/tracked-repositories.json <<'EOF'
+          mkdir -p /tmp/oss-no-health-test/config
+          cat > /tmp/oss-no-health-test/config/tracked-repositories.json <<'EOF'
           {
             "version": 1,
             "contributor": "test-user",
@@ -34,37 +34,40 @@ jobs:
         continue-on-error: true
         with:
           github-token: ${{ github.token }}
-          config-file: /tmp/oss-evidence-dir-test/config/tracked-repositories.json
-          evidence-dir: /tmp/oss-evidence-dir-test/my-evidence
+          config-file: /tmp/oss-no-health-test/config/tracked-repositories.json
+          evidence-dir: /tmp/oss-no-health-test/evidence
+          compute-health-scores: "false"
 
-      - name: Assert output paths reference the custom evidence directory
+      - name: Assert action ran and outputs are set
         env:
           OUTCOME: ${{ steps.action.outcome }}
           MANIFEST: ${{ steps.action.outputs.manifest-json }}
           HEALTH: ${{ steps.action.outputs.health-json }}
+          CRITICAL: ${{ steps.action.outputs.critical-count }}
+          AVG: ${{ steps.action.outputs.avg-health }}
         run: |
           echo "outcome: $OUTCOME"
           echo "manifest-json: $MANIFEST"
           echo "health-json: $HEALTH"
+          echo "critical-count: $CRITICAL"
+          echo "avg-health: $AVG"
 
           if [ "$OUTCOME" = "success" ]; then
-            # Both output paths should reference the custom evidence dir
-            if [[ "$MANIFEST" != *"my-evidence"* ]]; then
-              echo "FAIL: manifest-json '$MANIFEST' does not reference custom evidence dir 'my-evidence'"
+            # manifest-json should always be set
+            if [ -z "$MANIFEST" ]; then
+              echo "FAIL: action succeeded but manifest-json output is empty"
               exit 1
             fi
-            if [[ "$HEALTH" != *"my-evidence"* ]]; then
-              echo "FAIL: health-json '$HEALTH' does not reference custom evidence dir 'my-evidence'"
+            # critical-count and avg-health should be set (defaulting to 0 when no health file)
+            if [ -z "$CRITICAL" ]; then
+              echo "FAIL: critical-count output is empty"
               exit 1
             fi
-            echo "PASS: output paths reference custom evidence directory"
-
-            # Verify the manifest file actually exists at the reported path
-            if [ ! -f "$MANIFEST" ]; then
-              echo "FAIL: manifest file not found at '$MANIFEST'"
+            if [ -z "$AVG" ]; then
+              echo "FAIL: avg-health output is empty"
               exit 1
             fi
-            echo "PASS: manifest file exists at reported path"
+            echo "PASS: all outputs are set"
           elif [ "$OUTCOME" = "failure" ]; then
             echo "PASS: action failed gracefully (API calls may fail in harness environment)"
           else

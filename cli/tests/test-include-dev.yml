@@ -1,0 +1,60 @@
+name: Test include-dev flag
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create test package.json with devDependencies
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/tests/fixtures/dev-pkg"
+          cat > "$GITHUB_WORKSPACE/tests/fixtures/dev-pkg/package.json" <<'EOF'
+          {
+            "name": "test-project-dev",
+            "version": "1.0.0",
+            "dependencies": {
+              "lodash": "^4.17.21"
+            },
+            "devDependencies": {
+              "jest": "^29.0.0"
+            }
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          path: tests/fixtures/dev-pkg
+          threshold: "0"
+          include-dev: "true"
+          github-token: ${{ github.token }}
+
+      - name: Assert outputs are set when include-dev is true
+        env:
+          RESULTS: ${{ steps.action.outputs.results }}
+          AVG: ${{ steps.action.outputs.average-score }}
+          CRIT: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "results: $RESULTS"
+          echo "average-score: $AVG"
+          echo "critical-count: $CRIT"
+
+          if [ -z "$RESULTS" ]; then
+            echo "FAIL: results output is empty"
+            exit 1
+          fi
+          echo "PASS: results output is set"
+
+          if [ -z "$AVG" ]; then
+            echo "FAIL: average-score output is empty"
+            exit 1
+          fi
+          echo "PASS: average-score is '$AVG'"
+
+          if [ -z "$CRIT" ]; then
+            echo "FAIL: critical-count output is empty"
+            exit 1
+          fi
+          echo "PASS: critical-count is '$CRIT'"

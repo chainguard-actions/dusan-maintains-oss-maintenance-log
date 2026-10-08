@@ -1,0 +1,29 @@
+name: Test fail-on-critical disabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        with:
+          working-directory: tests/fixtures/no-fail-pkg
+          comment: "false"
+          fail-on-critical: "false"
+
+      - name: Assert action succeeded with fail-on-critical disabled
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # With fail-on-critical=false, the action must always succeed.
+          # The scan step uses || true so errors are suppressed, and the
+          # "Fail on critical findings" step is skipped when fail-on-critical=false.
+          if [ "$OUTCOME" != "success" ]; then
+            echo "FAIL: expected success with fail-on-critical=false, got '$OUTCOME'"
+            exit 1
+          fi
+          echo "PASS: action completed successfully with fail-on-critical=false"

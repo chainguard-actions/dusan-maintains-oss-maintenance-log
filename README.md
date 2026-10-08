@@ -1,16 +1,446 @@
-# dusan-maintains/oss-maintenance-log
+# OSS Maintenance Log
 
-Automatically track OSS package health, PR SLA, health scores, and npm stats. Config-driven — just edit tracked-repositories.json.
+> <!-- TAGLINE:START -->Contributing to 7 open-source packages — **2.4M npm downloads/week** across tracked ecosystem.<!-- TAGLINE:END -->
 
-Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at [https://github.com/dusan-maintains/oss-maintenance-log](https://github.com/dusan-maintains/oss-maintenance-log).
+[![npm](https://img.shields.io/npm/v/oss-health-scan?style=for-the-badge&color=cb3837&label=npm)](https://www.npmjs.com/package/oss-health-scan)
 
-## Versions
+<!-- RUN_STATUS:START -->
+[![Evidence Daily Update](https://github.com/dusan-maintains/oss-maintenance-log/actions/workflows/evidence-daily.yml/badge.svg)](https://github.com/dusan-maintains/oss-maintenance-log/actions/workflows/evidence-daily.yml)
+[![Validate](https://github.com/dusan-maintains/oss-maintenance-log/actions/workflows/validate.yml/badge.svg)](https://github.com/dusan-maintains/oss-maintenance-log/actions/workflows/validate.yml)
+<!-- RUN_STATUS:END -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![Tracked Packages](https://img.shields.io/badge/packages%20tracked-7-blue.svg)](#currently-tracked-projects)
+[![Tracked Ecosystem](https://img.shields.io/badge/tracked%20ecosystem-2.4M%2B-brightgreen.svg)](#-live-data)
+[![Open PRs](https://img.shields.io/badge/upstream%20PRs-7%20open-orange.svg)](#contributions)
+[![Auto-Updates](https://img.shields.io/badge/auto--updates-every%206h-blueviolet.svg)](https://github.com/dusan-maintains/oss-maintenance-log/actions)
 
-| Version | Tag | Upstream commit |
-|---------|-----|-----------------|
-| v1.2.0 | [`v1.2.0`](https://github.com/chainguard-actions/dusan-maintains-oss-maintenance-log/tree/v1.2.0) | [`cadd7bc`](https://github.com/dusan-maintains/oss-maintenance-log/commit/cadd7bcea7966f0dc9461bd09f79fea9dce10a6e) |
-| v1.3.0 | [`v1.3.0`](https://github.com/chainguard-actions/dusan-maintains-oss-maintenance-log/tree/v1.3.0) | [`92ea033`](https://github.com/dusan-maintains/oss-maintenance-log/commit/92ea033972d1c82fe95f74e181ef8e00671112ba) |
-| v1.6.0 | [`v1.6.0`](https://github.com/chainguard-actions/dusan-maintains-oss-maintenance-log/tree/v1.6.0) | [`16fd423`](https://github.com/dusan-maintains/oss-maintenance-log/commit/16fd4234f3cb32891e9ca12f25b1b6faead596de) |
+---
+
+> 📊 **Featured study — [State of npm Abandonment 2026](docs/STATE_OF_NPM_ABANDONMENT.md):** we ran this scanner across 123 of the most-depended-on npm packages. **20 are deprecated or archived yet still pull ~297M downloads/week** (`path-is-absolute`, `inflight`, `npmlog`, `request` …) — plus 21 more "cold" for 1–7 years. The rot `npm audit` never mentions.
+
+## 🔬 Scan Your Dependencies — In One Command
+
+```bash
+npx oss-health-scan express lodash moment react
+```
+
+<img src="docs/cli-demo.png" alt="CLI scan of express, lodash, moment, react showing health scores" width="100%">
+
+```
+  OSS Health Scan Results
+  ──────────────────────────────────────────────────
+  Scanned: 4 packages
+  Average health: 72.5/100
+  ● Critical: 0  ● Warning: 1  ● Healthy: 3
+
+   🟡 WARNING
+  moment                              ██████████░░░░░░░░░░ 50.8/100  last push 582d ago  25.8M/wk
+
+   🟢 HEALTHY
+  react                               ████████████████░░░░ 80.9/100  81.0M/wk
+  lodash                              ████████████████░░░░ 79.6/100  102.7M/wk
+  express                             ████████████████░░░░ 78.8/100  71.7M/wk
+```
+
+**Zero dependencies. v1.7.0.** Scans any npm package, scores 0–100, detects outdated versions (libyear), checks known CVEs via OSV.dev, auto-retries on failures, exits with code 1 on critical findings. GitHub GraphQL batching (1 API call for 50 packages). SARIF output for GitHub Code Scanning. Programmatic API for custom integrations. CI-ready.
+
+`npm audit` finds *known* vulnerabilities. **`oss-health-scan` finds abandoned dependencies _before_ they become a security problem** — deprecated, unmaintained, and outdated packages, in one command.
+
+> 📦 The published npm package **`oss-health-scan`** lives in [`cli/`](cli/) (zero-dep, MIT). The repo root is the evidence-log pipeline plus the reusable [composite Action](action.yml) — which is why the root `package.json` is marked `private`.
+
+---
+
+> **Your dependencies may not be vulnerable. They may be worse: abandoned.**
+
+### 🚨 `--paranoid` — supply-chain risk report
+
+```bash
+npx oss-health-scan --paranoid          # scans your package.json
+npx oss-health-scan core-js node-sass request left-pad express moment --paranoid
+```
+
+```text
+  ⚠  SUPPLY CHAIN RISK REPORT
+  Scanned dependencies: 6
+
+      3  critical maintenance risks
+      3  abandoned packages (deprecated / archived)
+      1  single-maintainer, high-impact (>1M downloads)
+      2  packages that run install scripts
+      1  EXTREME blast radius   3 HIGH
+
+  ── Worst dependency ──
+  core-js    97.7/100  ·  blast EXTREME
+      • Extremely popular — 61.8M downloads/week
+      • Single maintainer — bus-factor / account-takeover risk
+      • Runs install scripts — arbitrary code on `npm install`
+
+  request    5/100  ·  blast HIGH
+      • Deprecated by its own maintainer · 14.6M downloads/week
+      • No upstream commit in 1.8 years
+      → Remove — migrate to undici, got, axios
+
+  left-pad   5/100  ·  blast MODERATE
+      • Deprecated + archived · still 1.2M downloads/week
+      → Remove — migrate to String.prototype.padStart() (native)
+```
+
+Every flagged package gets a **blast-radius** rating (*how much pain if it's compromised* — reach × install-scripts × single-maintainer × abandonment × CVEs), a plain-English *why this matters*, and a suggested replacement. The full breakdown is machine-readable via `--json` (an **OSS Health Manifest**) and `--sarif`.
+
+### How it compares
+
+|  | `npm audit` | Dependabot | Snyk | **oss-health-scan** |
+|---|:--:|:--:|:--:|:--:|
+| Known CVEs | ✅ | ✅ | ✅ | ✅ |
+| Abandoned / deprecated detection | ❌ | partial | partial | ✅ |
+| Maintenance health score (0–100) | ❌ | ❌ | partial | ✅ |
+| Blast-radius rating | ❌ | ❌ | ❌ | ✅ |
+| Zero-dep · no account · one command | ❌ | n/a | ❌ | ✅ |
+
+*Complementary, not a replacement — run it alongside `npm audit`. The `--json` output is a stable **OSS Health Manifest** (`format: "oss-health-manifest/v1"`) for CI, dashboards, and audit evidence.*
+
+<details>
+<summary><strong>CLI flags</strong></summary>
+
+```bash
+npx oss-health-scan            # Scan ./package.json
+npx oss-health-scan pkg1 pkg2   # Scan specific packages
+npx oss-health-scan --dev       # Include devDependencies
+npx oss-health-scan --outdated  # Show installed vs latest + libyear metric
+npx oss-health-scan --vulns     # Check OSV.dev for known CVEs
+npx oss-health-scan --unused    # Detect unused dependencies
+npx oss-health-scan --json      # JSON output for CI
+npx oss-health-scan --sarif     # SARIF 2.1.0 for GitHub Code Scanning
+npx oss-health-scan --markdown  # Markdown table for PR comments
+npx oss-health-scan --threshold 40  # Only unhealthy
+npx oss-health-scan --sort name # Sort by: score, name, downloads, risk
+```
+</details>
+
+<details>
+<summary><strong>Programmatic API</strong></summary>
+
+```javascript
+const { scanPackages, scanPackageJson } = require('oss-health-scan');
+
+// Scan specific packages
+const { results } = await scanPackages(['react', 'lodash', 'moment']);
+for (const r of results) {
+  console.log(`${r.name}: ${r.health_score}/100 [${r.risk_level}]`);
+}
+
+// Scan a project's package.json
+const { results, pkgName } = await scanPackageJson('.', { dev: true });
+```
+</details>
+
+<details>
+<summary><strong>Config file</strong></summary>
+
+Add to `package.json` or create `.oss-health-scanrc.json`:
+```json
+{
+  "oss-health-scan": {
+    "threshold": 40,
+    "exclude": ["moment"],
+    "dev": true
+  }
+}
+```
+</details>
+
+<details>
+<summary><strong>GitHub Code Scanning (SARIF)</strong></summary>
+
+```yaml
+- name: Scan dependency health
+  run: npx oss-health-scan --sarif > health.sarif
+
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: health.sarif
+```
+</details>
+
+---
+
+## 📊 Interactive Dashboard
+
+[**➜ Open Live Dashboard**](https://dusan-maintains.github.io/oss-maintenance-log)
+
+<img src="docs/dashboard-preview.png" alt="Health score cards with circular gauges, npm download chart" width="100%">
+<img src="docs/dashboard-charts.png" alt="Radar chart comparing packages, action queue" width="100%">
+
+Dark-mode dashboard with Chart.js — health score gauges, npm download distribution, radar breakdown, action queue. Auto-updates every 6 hours with fresh data.
+
+---
+
+## Problem
+
+Thousands of packages are effectively abandoned while still receiving hundreds of thousands of weekly downloads. Issue trackers fill up, security patches go unmerged, and downstream teams inherit silent risk. `npm audit` catches CVEs — but **not abandoned packages**.
+
+## About This Project
+
+This is a public evidence log for ongoing maintenance work on a curated set of abandoned-but-critical npm packages. Five of the seven tracked repositories carry active "maintainers wanted" signals from their original authors and together move close to two million weekly downloads through the ecosystem.
+
+The work here is not dramatic. Most of it is the quiet kind: reading old code, writing the regression test nobody got around to, re-opening a five-year-old issue with a tested patch, answering the "is this still maintained?" question that sits unanswered on the issue tracker.
+
+The evidence log exists so that the work is verifiable rather than self-reported — every claim is machine-derived from the GitHub and npm APIs, timestamped in `evidence/`, and regenerated on a six-hour cadence by the pipeline in `scripts/`. The accompanying `oss-health-scan` CLI ships the same detection logic as a standalone tool for anyone who wants to audit their own dependency graph.
+
+For the full reach numbers, methodology, and per-package deep dives see [docs/IMPACT.md](./docs/IMPACT.md) and [docs/CASE_STUDIES.md](./docs/CASE_STUDIES.md). For the underlying philosophy see [docs/MAINTAINER_PLAYBOOK.md](./docs/MAINTAINER_PLAYBOOK.md).
+
+## What This Does
+
+Config-driven PowerShell + GitHub Actions that automatically:
+
+- **Polls GitHub API** — stars, forks, issues, last push date per repo
+- **Pulls npm downloads** — weekly rolling window
+- **Tracks PRs** — state, mergeability, diff stats for your contributions
+- **Monitors review SLA** — flags when maintainer feedback goes stale
+- **Computes health scores (0–100)** — weighted engine with SVG badges
+- **Detects trends** — 180-day history, 7-day and 30-day deltas
+- **Fires alerts** — auto-creates GitHub Issues when packages drop below critical threshold
+- **Generates action queue** — prioritized by urgency
+- **Commits snapshots** — machine-readable JSON + human-readable Markdown every 6 hours
+- Renders **interactive dark-mode dashboard** on GitHub Pages
+
+## Currently Tracked Projects
+
+<!-- TRACKED_PROJECTS:START -->
+| Project | Stars | npm/week | Status | Health | My PRs |
+|---------|-------|----------|--------|--------|--------|
+| [grafana/grafana](https://github.com/grafana/grafana) | 74.2k | — | 🟢 Open | ![health](evidence/badges/health-grafana.svg) | [#119212](https://github.com/grafana/grafana/pull/119212) |
+| [lingdojo/kana-dojo](https://github.com/lingdojo/kana-dojo) | 2.6k | — | ✅ **Merged** | ![health](evidence/badges/health-kana-dojo.svg) | [#6309](https://github.com/lingdojo/kana-dojo/pull/6309) |
+| [kylefox/jquery-modal](https://github.com/kylefox/jquery-modal) | 2.6k | 18.3k | 🟡 Maintainers Wanted | ![health](evidence/badges/health-jquery-modal.svg) | [#315](https://github.com/kylefox/jquery-modal/pull/315), [#316](https://github.com/kylefox/jquery-modal/pull/316), [#317](https://github.com/kylefox/jquery-modal/pull/317) |
+| [kylefox/jquery-tablesort](https://github.com/kylefox/jquery-tablesort) | 258 | 4.7k | 🟡 Maintainers Wanted | ![health](evidence/badges/health-jquery-tablesort.svg) | [#49](https://github.com/kylefox/jquery-tablesort/pull/49) |
+| [extrabacon/python-shell](https://github.com/extrabacon/python-shell) | 2.2k | 370.9k | 🔴 Maintainer Gap | ![health](evidence/badges/health-python-shell.svg) | [#320](https://github.com/extrabacon/python-shell/pull/320) |
+| [jkbrzt/rrule](https://github.com/jkbrzt/rrule) | 3.7k | 2M | 🔴 Open Backlog | ![health](evidence/badges/health-rrule.svg) | [#664](https://github.com/jkbrzt/rrule/pull/664) |
+| [Hellenic/react-hexgrid](https://github.com/Hellenic/react-hexgrid) | 351 | 1.3k | 🟡 Maintainer Needed | ![health](evidence/badges/health-react-hexgrid.svg) | [#123](https://github.com/Hellenic/react-hexgrid/pull/123) |
+<!-- TRACKED_PROJECTS:END -->
+
+*Across tracked projects:* **<!-- STATS:START -->85.9k stars · 2.4M downloads/week across tracked projects · refreshed 06/05/2026<!-- STATS:END -->**
+
+## Health Scoring
+
+Each package gets a **weighted health score (0–100)**:
+
+| Dimension | Weight | Metrics |
+|-----------|--------|---------|
+| **Maintenance** | 40% | Last push recency (exponential decay), last npm publish, open issues ratio |
+| **Community** | 25% | GitHub stars (log-scaled), forks |
+| **Popularity** | 20% | npm downloads/week (log-scaled) |
+| **Risk** | 15% | Inactivity penalty, issue backlog, stale publish, license risk |
+
+**Instant flags:** DEPRECATED → 5/100, ARCHIVED → 8/100.
+
+## Contributions
+
+### Merged
+
+<!-- CONTRIBUTIONS_MERGED:START -->
+- **kana-dojo [#6309](https://github.com/lingdojo/kana-dojo/pull/6309)** — content: add new japanese idiom. Merged 02/27/2026.
+<!-- CONTRIBUTIONS_MERGED:END -->
+
+### Open
+
+<!-- CONTRIBUTIONS_OPEN:START -->
+- **jquery-modal [#315](https://github.com/kylefox/jquery-modal/pull/315)** — fix: harden close button rendering and refresh docs/examples
+- **jquery-modal [#316](https://github.com/kylefox/jquery-modal/pull/316)** — fix: keep ajax callbacks scoped to their originating modal
+- **jquery-modal [#317](https://github.com/kylefox/jquery-modal/pull/317)** — fix: make plugin initialization idempotent for multiple imports
+- **jquery-tablesort [#49](https://github.com/kylefox/jquery-tablesort/pull/49)** — Fix stale tablesort.$th reference after header clicks
+- **python-shell [#320](https://github.com/extrabacon/python-shell/pull/320)** — Fix runString temp path to use tmpdir() and add regression test
+- **rrule [#664](https://github.com/jkbrzt/rrule/pull/664)** — fix: handle WeekdayStr arrays when serializing BYDAY
+- **react-hexgrid [#123](https://github.com/Hellenic/react-hexgrid/pull/123)** — test: add coverage for GridGenerator.ring and .spiral
+<!-- CONTRIBUTIONS_OPEN:END -->
+
+## Use It Yourself
+
+### Quick Scan (no install)
+
+```bash
+npx oss-health-scan express lodash moment
+```
+
+### Full Monitoring Setup
+
+1. Fork this repository
+2. Edit `config/tracked-repositories.json` — your packages, PRs, SLA settings
+3. Push — GitHub Actions runs every 6 hours
+4. `evidence/` fills with JSON + Markdown snapshots
+5. Health scores + SVG badges auto-generate
+
+```json
+{
+  "version": 1,
+  "contributor": "your-github-username",
+  "default_sla_hours": 24,
+  "repositories": [
+    {
+      "owner": "org",
+      "repo": "package-name",
+      "package": "npm-package-name",
+      "tracked_pr_numbers": [42]
+    }
+  ]
+}
+```
+
+### CI Integration
+
+**Turnkey — scan every PR, post a sticky report, fail on critical** (recommended):
+
+```yaml
+# .github/workflows/oss-health.yml
+name: OSS Health
+on: [pull_request]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  oss-health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dusan-maintains/oss-maintenance-log/scan-action@main
+        with:
+          comment: true
+          fail-on-critical: true
+```
+
+Posts a sticky dependency-health report on the PR and fails the check when a deprecated/abandoned dependency is introduced.
+
+<details>
+<summary><strong>Other setups (scheduled, threshold, SARIF)</strong></summary>
+
+```yaml
+# .github/workflows/health-check.yml
+name: Dependency Health Check
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npx oss-health-scan --threshold 30
+
+  # Optional: upload to GitHub Code Scanning
+  sarif:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npx oss-health-scan --sarif > health.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: health.sarif
+```
+
+</details>
+
+### GitHub Action (reusable)
+
+```yaml
+- uses: actions/checkout@v4
+
+- uses: dusan-maintains/oss-maintenance-log@main
+  id: health
+  with:
+    github-token: ${{ github.token }}
+    config-file: config/tracked-repositories.json
+    evidence-dir: evidence
+
+- name: Fail on critical
+  if: steps.health.outputs.critical-count > 0
+  run: |
+    echo "Found ${{ steps.health.outputs.critical-count }} critical packages"
+    echo "Average health: ${{ steps.health.outputs.avg-health }}"
+    exit 1
+```
+
+<!-- LIVE_DATA:START -->
+## 📊 Live Data
+
+- [📊 Interactive Dashboard](https://dusan-maintains.github.io/oss-maintenance-log) — health scores, charts, action queue
+- [Health Scores](./evidence/health-scores.md) — weighted 0-100 per package
+- [Ecosystem Status](./evidence/ecosystem-status.md) — aggregated snapshot
+- [Action Queue](./evidence/action-queue.md) — prioritized tasks
+- Per-repo SLA: [grafana](./evidence/review-sla-grafana.md) · [kana-dojo](./evidence/review-sla-kana-dojo.md) · [jquery-modal](./evidence/review-sla.md) · [jquery-tablesort](./evidence/review-sla-tablesort.md) · [python-shell](./evidence/review-sla-python-shell.md) · [rrule](./evidence/review-sla-rrule.md) · [react-hexgrid](./evidence/review-sla-react-hexgrid.md)
+<!-- LIVE_DATA:END -->
+
+## Project Structure
+
+```
+config/tracked-repositories.json     ← All configuration
+scripts/
+  common.ps1                        ← Shared functions (DRY)
+  update-all-evidence.ps1            ← Single orchestrator (full pipeline)
+  compute-health-scores.ps1          ← Health scoring (0-100)
+  compute-trends.ps1                 ← 180-day trend engine
+  check-alerts.ps1                   ← Auto GitHub Issues
+  update-readme-stats.ps1            ← Auto-regenerates all README sections
+  validate-evidence.js               ← JSON Schema validator for evidence outputs
+cli/
+  bin/scan.js                        ← CLI entry point
+  lib/api.js                         ← Programmatic API (scanPackages, scanPackageJson)
+  lib/scoring.js                     ← JS health algorithm
+  lib/sarif.js                       ← SARIF 2.1.0 output for GitHub Code Scanning
+  lib/outdated.js                    ← Libyear metric + drift classification
+  lib/osv.js                         ← CVE check via OSV.dev API
+  lib/unused.js                      ← Unused dependency detection
+  lib/github-graphql.js              ← GitHub GraphQL batch API (1 query for N repos)
+  lib/fetcher.js                     ← HTTP client with retry + 429 handling + ETag cache
+  lib/reporter.js                    ← Colored terminal output
+schemas/
+  *.schema.json                      ← JSON Schema (draft-07) contracts for evidence outputs
+evidence/
+  *.json, *.md                       ← Machine + human snapshots
+  badges/*.svg                       ← Health badges
+tests/
+  common.Tests.ps1                   ← Pester v5 tests (21 passing)
+  health-score.Tests.ps1
+cli/test/
+  *.test.js                          ← 71 JS tests
+docs/
+  ARCHITECTURE.md                    ← System layout and control flow
+  DATA_MODEL.md                      ← Config + evidence output contracts
+  OPERATIONS.md                      ← Local commands and runtime constraints
+  ROADMAP.md                         ← Engineering priorities
+  IMPACT.md                          ← Measured reach and methodology
+  CASE_STUDIES.md                    ← Per-package maintenance deep dives
+  MAINTAINER_PLAYBOOK.md             ← Operational principles and decision trees
+.github/workflows/
+  evidence-daily.yml                 ← Cron: full pipeline every 6 hours
+  validate.yml                       ← CI: config + Pester + CLI tests + schema validation
+  publish-cli.yml                    ← Publish to npm on release
+```
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system layout and control flow
+- [`docs/DATA_MODEL.md`](./docs/DATA_MODEL.md) — config and evidence output contracts
+- [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) — local commands and runtime constraints
+- [`docs/ROADMAP.md`](./docs/ROADMAP.md) — engineering priorities
+- [`docs/IMPACT.md`](./docs/IMPACT.md) — measured reach, methodology, and ecosystem effect
+- [`docs/CASE_STUDIES.md`](./docs/CASE_STUDIES.md) — per-package maintenance deep dives
+- [`docs/MAINTAINER_PLAYBOOK.md`](./docs/MAINTAINER_PLAYBOOK.md) — operational principles and decision trees
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — how to add tracked packages or propose changes
+- [`SECURITY.md`](./SECURITY.md) — vulnerability reporting and supply-chain posture
+- [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) — community standards
+
+## License
+
+MIT
+
+---
+
+*Auto-updated every 6 hours by [GitHub Actions](https://github.com/dusan-maintains/oss-maintenance-log/actions).*
 
 ## Privacy
 

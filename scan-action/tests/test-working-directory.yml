@@ -1,0 +1,28 @@
+name: Test custom working directory
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        with:
+          working-directory: tests/fixtures/custom-dir
+          comment: "false"
+          fail-on-critical: "false"
+
+      - name: Assert action succeeded with custom working directory
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # The action should succeed when pointed at a valid package.json directory
+          # with fail-on-critical=false (scan errors are suppressed with || true).
+          if [ "$OUTCOME" != "success" ]; then
+            echo "FAIL: expected success with custom working-directory, got '$OUTCOME'"
+            exit 1
+          fi
+          echo "PASS: action completed successfully with custom working-directory"

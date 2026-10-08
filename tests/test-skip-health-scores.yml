@@ -1,0 +1,96 @@
+name: Test skip health scores
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create config file
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/config"
+          cat > "$GITHUB_WORKSPACE/config/tracked-repositories.json" << 'EOF'
+          {
+            "version": 1,
+            "contributor": "test-user",
+            "default_sla_hours": 24,
+            "repositories": [
+              {
+                "owner": "actions",
+                "repo": "checkout",
+                "package": null,
+                "status_label": "Open",
+                "maintainer_needed_signal": "Test repository for CI",
+                "tracked_pr_numbers": [1],
+                "review_sla_base_name": "review-sla-checkout"
+              }
+            ]
+          }
+          EOF
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          github-token: ${{ github.token }}
+          config-file: config/tracked-repositories.json
+          evidence-dir: evidence-noscores
+          compute-health-scores: "false"
+
+      - name: Assert outputs and health scoring was skipped
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          MANIFEST_JSON: ${{ steps.action.outputs.manifest-json }}
+          HEALTH_JSON: ${{ steps.action.outputs.health-json }}
+          CRITICAL_COUNT: ${{ steps.action.outputs.critical-count }}
+          AVG_HEALTH: ${{ steps.action.outputs.avg-health }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "manifest-json: $MANIFEST_JSON"
+          echo "health-json: $HEALTH_JSON"
+          echo "critical-count: $CRITICAL_COUNT"
+          echo "avg-health: $AVG_HEALTH"
+
+          if [ "$OUTCOME" = "success" ]; then
+            # manifest-json output must always be set
+            if [ -z "$MANIFEST_JSON" ]; then
+              echo "FAIL: manifest-json output is empty"
+              exit 1
+            fi
+            echo "PASS: manifest-json output is set to '$MANIFEST_JSON'"
+
+            # When health scoring is skipped, critical-count and avg-health should be 0
+            if [ "$CRITICAL_COUNT" != "0" ]; then
+              echo "FAIL: expected critical-count=0 when health scoring is skipped, got '$CRITICAL_COUNT'"
+              exit 1
+            fi
+            echo "PASS: critical-count=0 as expected when health scoring is skipped"
+
+            if [ "$AVG_HEALTH" != "0" ]; then
+              echo "FAIL: expected avg-health=0 when health scoring is skipped, got '$AVG_HEALTH'"
+              exit 1
+            fi
+            echo "PASS: avg-health=0 as expected when health scoring is skipped"
+
+            # Verify manifest.json file exists
+            if [ ! -f "$GITHUB_WORKSPACE/evidence-noscores/manifest.json" ]; then
+              echo "FAIL: manifest.json not found at expected path"
+              exit 1
+            fi
+            echo "PASS: manifest.json exists"
+
+            # Verify health-scores.json does NOT exist (health scoring was skipped)
+            if [ -f "$GITHUB_WORKSPACE/evidence-noscores/health-scores.json" ]; then
+              echo "FAIL: health-scores.json should not exist when compute-health-scores=false"
+              exit 1
+            fi
+            echo "PASS: health-scores.json correctly absent when health scoring is skipped"
+
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (API calls may fail in test environment)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

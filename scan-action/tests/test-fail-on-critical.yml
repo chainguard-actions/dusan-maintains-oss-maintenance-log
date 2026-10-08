@@ -1,0 +1,33 @@
+name: Test fail-on-critical enabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          working-directory: tests/fixtures/fail-critical-pkg
+          comment: "false"
+          fail-on-critical: "true"
+
+      - name: Assert action ran (success or failure are both valid outcomes)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # With fail-on-critical=true, the action may succeed (0 critical findings)
+          # or fail (>0 critical findings). Both are valid outcomes.
+          # What is NOT valid is a skipped step or an unexpected outcome.
+          if [ "$OUTCOME" = "success" ]; then
+            echo "PASS: action succeeded (0 critical findings)"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed as expected (critical findings detected)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

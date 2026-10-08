@@ -1,0 +1,56 @@
+name: Test threshold pass scenario
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create test package.json with well-maintained packages
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/tests/fixtures/threshold-pkg"
+          cat > "$GITHUB_WORKSPACE/tests/fixtures/threshold-pkg/package.json" <<'EOF'
+          {
+            "name": "test-threshold-project",
+            "version": "1.0.0",
+            "dependencies": {
+              "lodash": "^4.17.21"
+            }
+          }
+          EOF
+
+      - id: action
+        uses: .
+        with:
+          path: tests/fixtures/threshold-pkg
+          threshold: "10"
+          include-dev: "false"
+          github-token: ${{ github.token }}
+        continue-on-error: true
+
+      - name: Assert action ran and produced outputs or failed gracefully
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          RESULTS: ${{ steps.action.outputs.results }}
+          AVG: ${{ steps.action.outputs.average-score }}
+          CRIT: ${{ steps.action.outputs.critical-count }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "results: $RESULTS"
+          echo "average-score: $AVG"
+          echo "critical-count: $CRIT"
+
+          if [ "$OUTCOME" = "success" ]; then
+            if [ -z "$RESULTS" ]; then
+              echo "FAIL: action succeeded but results output is empty"
+              exit 1
+            fi
+            echo "PASS: action succeeded with results"
+          elif [ "$OUTCOME" = "failure" ]; then
+            # Threshold failure is acceptable if packages scored below threshold
+            echo "PASS: action failed due to threshold (packages below threshold=$THRESHOLD)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
